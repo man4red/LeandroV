@@ -14,6 +14,12 @@ $path = Split-Path -parent $MyInvocation.MyCommand.Definition
 $date = $(Get-Date -format "yyyyMMdd_HHmmss")
 $log =  "$path\$($MyInvocation.MyCommand.Name)_$date.log"
 
+try {
+    Start-Transcript -Path $log -Force | Out-Null
+} catch {
+    Write-Warning $_.Exception.Message
+}
+
 # Enable old log cleanup?
 $logsCleanupEnabled = $false
 $logsCleanupOlderThan = 14
@@ -29,12 +35,6 @@ if ($logsCleanupEnabled) {
     } catch {
         Write-Warning $_.Exception.Message
     }
-}
-
-try {
-    Start-Transcript -Path $log -Force | Out-Null
-} catch {
-    Write-Warning $_.Exception.Message
 }
 
 <# 
@@ -273,7 +273,7 @@ function TestSync ($path) {
             throw $_.Exception.Message
         }
 
-        # Now we will look if sync is working by searching it inside the metadata storage and also checking the attribute
+        # Now we will look if sync is working by searching it inside the metadata storage
         $timeout = $metaFound = $attribFound = $false
         $i = 0
         while (-not $timeout -and (-not $metaFound -and -not $attribfound)) {
@@ -342,11 +342,11 @@ Function Main {
     } catch {}
     # Send email
     if ($global:SMTPSendEmail -and ($global:SMTPSendEmailOnErrorOnly -and $result.Id -ne 0 -or -not $global:SMTPSendEmailOnErrorOnly)) {
+
         Write-Debug "Sending mail..."
-
-        $SMTPSubject = $global:SMTPSubject -f $result
-        $SMTPBody = Get-Content $log | ConvertTo-HTML -Property @{Label='Text';Expression={$_}} | Out-String
-
+        $SMTPSubject = $global:SMTPSubject -f $result.Desc
+        $SMTPBody = Get-Content $log `
+            | ConvertTo-HTML -Property @{Label="$SMTPSubject";Expression={$_}} -Title $SMTPSubject | Out-String
         SendEmail -From $global:SMTPFrom `
                   -ReplyTo $global:SMTPReplyTo `
                   -To $global:SMTPTo `
