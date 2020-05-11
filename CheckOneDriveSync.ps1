@@ -276,7 +276,7 @@ function TestSync ($path) {
         # Now we will look if sync is working by searching it inside the metadata storage
         $timeout = $metaFound = $attribFound = $false
         $i = 0
-        while (-not $timeout -and (-not $metaFound -and -not $attribfound)) {
+        while (-not $timeout -and (-not $metaFound -and -not $attribFound)) {
             # Sleep for a bit
             $i++
             Write-Debug "Sleeping for $global:TestCycleSleepSeconds`s (cyclye $i of $global:TestCycles)"
