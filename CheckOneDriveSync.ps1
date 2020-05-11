@@ -8,6 +8,7 @@ This script will:
    the metadata and ensure that the file's attribute ReparsePoint was successfully set
 4. Will send the results by mail (including log as an attachment)
 #>
+$global:DebugPreference = "Continue" #SilentlyContinue
 
 # Get current directory and set import file in variable
 $path = Split-Path -parent $MyInvocation.MyCommand.Definition
@@ -15,27 +16,15 @@ $date = $(Get-Date -format "yyyyMMdd_HHmmss")
 $log =  "$path\$($MyInvocation.MyCommand.Name)_$date.log"
 
 try {
+    Stop-Transcript | Out-Null
     Start-Transcript -Path $log -Force | Out-Null
 } catch {
-    Write-Warning $_.Exception.Message
+    Write-Debug $_.Exception.Message
 }
 
 # Enable old log cleanup?
-$logsCleanupEnabled = $false
-$logsCleanupOlderThan = 14
-
-if ($logsCleanupEnabled) {
-    $limit = (Get-Date).AddDays(-$logsCleanupOlderThan)
-    Write-Debug "Removing logs older than $limit"
-    # Delete files older than the $limit.
-    try {
-        Get-ChildItem -Path $path -Recurse -Force -File -Filter "$($MyInvocation.MyCommand.Name)_*.log" `
-            | Where-Object { !$_.PSIsContainer -and $_.CreationTime -lt $limit } `
-            | Remove-Item -Force -Confirm:$false -Verbose
-    } catch {
-        Write-Warning $_.Exception.Message
-    }
-}
+$global:logsCleanupEnabled = $true
+$global:logsCleanupOlderThan = 14
 
 <#
 Random file name and size
@@ -50,7 +39,6 @@ $global:testFileNameSize = 42KB
 # OD Paths
 $global:oneDrivePath = "$env:USERPROFILE\OneDrive"
 $global:oneDriveAppDataPath = "$env:USERPROFILE\AppData\Local\Microsoft\OneDrive"
-$global:DebugPreference = "Continue" #SilentlyContinue
 
 # Test cycles parameters
 $global:TestCycleSleepSeconds = 10
@@ -80,6 +68,7 @@ $returnCodes = @{
     OneDriveAppDataPathIsMissing = @{ Id = 3; Desc = "OneDrive AppData is missing" }
     DatFilesWereFound            = @{ Id = 4; Desc = "Dat file(s) were found" }
     DatFilesWereNotFound         = @{ Id = 5; Desc = "Dat file(s) were not found" }
+    SMTPIsNotEnabled             = @{ Id = 6; Desc = "SMTPSendEmail is not enabled or is set to SMTPSendEmailOnErrorOnly while there's no Errors" }
 }
 
 function SendEmail {
@@ -107,10 +96,10 @@ function SendEmail {
         [string[]]$Files,
 
         [Parameter(Mandatory=$False)]
-        [string]$smtpServer = $global:SMTPServer,
+        [string]$SMTPServer = $global:SMTPServer,
 
         [Parameter(Mandatory=$False)]
-        [int]$smtpPort = $global:SMTPPort,
+        [int]$SMTPPort = $global:SMTPPort,
 
         [Parameter(Mandatory=$False)]
         [System.Net.Mail.MailPriority]$Priority = [System.Net.Mail.MailPriority]::Normal
@@ -120,7 +109,7 @@ function SendEmail {
     $msg = New-Object System.Net.Mail.MailMessage
 
     #Creating SMTP server object
-    $SMTPClient = New-Object System.Net.Mail.SmtpClient($smtpServer, $smtpPort)
+    $SMTPClient = New-Object System.Net.Mail.SmtpClient($SMTPServer, $SMTPPort)
 
     # Files to attachments
     if ($Files.Count -gt 0 ) {
@@ -165,7 +154,7 @@ SMTP:
     Attach: $((($msg.Attachments | %{$_.Name}) -join ", ").ToString())
 "@
 
-    Write-Debug "Trying to send mail _via_ $smtpServer`:$smtpPort "
+    Write-Debug "Trying to send mail _via_ $SMTPServer`:$SMTPPort"
     #Sending email
     try {
 
@@ -180,7 +169,7 @@ SMTP:
     } finally {
         #Dispose
         $msg.Attachments | %{
-            try { $_.Dispose() } catch {}
+            try { $_.Dispose() } catch { Write-Warning $_.Exception.Message }
         }
     }
 }
@@ -254,7 +243,36 @@ Function BinaryFindInFile {
         } catch {
             throw $_.Exception.Message
         } finally {
-            try { $fileStream.Close() } catch {}
+            try { $fileStream.Close() } catch { Write-Warning $_.Exception.Message }
+        }
+    }
+}
+
+Function CleanUpLogs {
+    [cmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Low')]
+    param (
+        [Parameter(Mandatory=$True)]
+        [string[]]$path,
+
+        [Parameter(Mandatory=$True)]
+        [int]$days
+    )
+
+    $limit = (Get-Date).AddDays(-$days)
+    Write-Debug "Removing logs older than $limit at '$path'"
+    # Delete files older than the $limit.
+    foreach ($folder in $path) {
+        try {
+            $logs = Get-ChildItem -Path $folder -Force -File -Filter "$($MyInvocation.MyCommand.Name)_*.log" `
+                | Where-Object { -not $_.PSIsContainer -and $_.CreationTime -lt $limit }
+            if ($logs -and $logs.Count -gt 0) {
+                Write-Debug "CleanUpLogs: $($logs.Count) were found"
+                $logs | Remove-Item -Force -Verbose -WhatIf
+            } else {
+                Write-Debug "ClenUpLogs: no old logs were found"
+            }
+        } catch {
+            Write-Warning $_.Exception.Message
         }
     }
 }
@@ -322,16 +340,23 @@ function TestSync ($path) {
             Start-Sleep -Seconds 1
             Write-Debug "Deleting test file '$path'"
             [System.IO.File]::Delete($path)
-        } catch {}
+        } catch { Write-Warning $_.Exception.Message }
     }
 }
 
 Function Main {
+    # PreFlights
     PreFlightCheck
 
+    # CleanupLogs
+    if ($global:logsCleanupEnabled) {
+        CleanUpLogs -path $path -days $global:logsCleanupOlderThan
+    }
+
+    # Test Sync and get the result
     $result = TestSync -path "$global:oneDrivePath\$global:testFileName"
 
-    if ($result.Id -eq 0) {
+    if ($result -and $result.Id -eq 0) {
         Write-Host -ForegroundColor Green "OneDrive sync is OK"
     } else {
         Write-Host -ForegroundColor Red "Something went wrong... see the log '$log'"
@@ -339,7 +364,7 @@ Function Main {
 
     try {
         Stop-Transcript | Out-Null
-    } catch {}
+    } catch { Write-Debug $_.Exception.Message }
     # Send email
     if ($global:SMTPSendEmail -and ($global:SMTPSendEmailOnErrorOnly -and $result.Id -ne 0 -or -not $global:SMTPSendEmailOnErrorOnly)) {
 
@@ -355,7 +380,7 @@ Function Main {
                   -Body $SMTPBody `
                   -Files @($log)
     } else {
-        Write-Debug "SMTPSendEmail is not enabled or is set to SMTPSendEmailOnErrorOnly while there's no Errors"
+        Write-Debug $returnCodes.SMTPIsNotEnabled.Desc
     }
     Write-Host -ForegroundColor Cyan "Done!"
 } Main
