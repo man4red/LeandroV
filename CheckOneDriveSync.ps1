@@ -5,7 +5,7 @@ This script will:
 1. Create a TempFile within the user's OneDrive folder (if found)
 2. Will wait for $global:TestCycleSleepSeconds
 3. will check if the file is in sync by finding the TempFileName hash in the metadata and ensure that the file's attribute ReparsePoint was successfully set
-4. Will send the results by mail
+4. Will send the results by mail (including log as an attachment)
 #>
 
 # Get current directory and set import file in variable 
@@ -259,6 +259,7 @@ Function BinaryFindInFile {
 }
 
 function TestSync ($path) {
+    $result = $false
     try {
         Write-Debug "Creating test file '$path'"
         try {
@@ -301,7 +302,7 @@ function TestSync ($path) {
             }
         }
 
-        # return code
+        # switch return code
         switch ($true) {
             $timeout     {$result = $returnCodes.NotInSync}
             $metaFound   {$result = $returnCodes.InSync}
@@ -310,7 +311,7 @@ function TestSync ($path) {
                 $result = $returnCodes.NotInSync
             }
         }
-
+        # return result
         return $result
 
     } catch {
@@ -325,14 +326,9 @@ function TestSync ($path) {
 }
 
 Function Main {
-    #####
     PreFlightCheck
-    #####
 
-    #####
     $result = TestSync -path "$global:oneDrivePath\$global:testFileName"
-    #####
-
 
     if ($result.Id -eq 0) {
         Write-Host -ForegroundColor Green "OneDrive sync is OK"
@@ -348,12 +344,7 @@ Function Main {
         Write-Debug "Sending mail..."
 
         $SMTPSubject = $global:SMTPSubject -f $result
-        $SMTPBody = "
-        <html>
-          <body>
-            <h1>OneDrive@$env:COMPUTERNAME ($result)</h1>
-          </body>
-        </html>"
+        $SMTPBody = Get-Content $log | ConvertTo-HTML -Property @{Label='Text';Expression={$_}} | Out-String
 
         SendEmail -From $global:SMTPFrom `
                   -ReplyTo $global:SMTPReplyTo `
