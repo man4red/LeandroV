@@ -4,7 +4,8 @@ V1.0
 This script will:
 1. Create a TempFile within the user's OneDrive folder (if found)
 2. Will wait for $global:TestCycleSleepSeconds
-3. will check if the file is in sync by finding the TempFileName hash in the metadata and ensure that the file's attribute ReparsePoint was successfully set
+3. Will check if the file is in sync by finding the TempFileName hash in
+   the metadata and ensure that the file's attribute ReparsePoint was successfully set
 4. Will send the results by mail (including log as an attachment)
 #>
 
@@ -22,7 +23,9 @@ if ($logsCleanupEnabled) {
     Write-Debug "Removing logs older than $limit"
     # Delete files older than the $limit.
     try {
-        Get-ChildItem -Path $path -Recurse -Force -File -Filter "$($MyInvocation.MyCommand.Name)_*.log" | Where-Object { !$_.PSIsContainer -and $_.CreationTime -lt $limit } | Remove-Item -Force -Confirm:$false -Verbose
+        Get-ChildItem -Path $path -Recurse -Force -File -Filter "$($MyInvocation.MyCommand.Name)_*.log" `
+            | Where-Object { !$_.PSIsContainer -and $_.CreationTime -lt $limit } `
+            | Remove-Item -Force -Confirm:$false -Verbose
     } catch {
         Write-Warning $_.Exception.Message
     }
@@ -168,8 +171,8 @@ SMTP:
 
         # SSL if needed
         #$SMTPClient.EnableSsl = $True
-        # AUTH
-        #$SMTPClient.Credentials = New-Object System.Net.NetworkCredential( $global:SMTPAuthUsername , $global:SMTPAuthPassword );
+        # SMTP AUTH
+        #$SMTPClient.Credentials = New-Object System.Net.NetworkCredential($global:SMTPAuthUsername, $global:SMTPAuthPassword)
 
         $SMTPClient.Send($msg)
     } catch [Exception] {
@@ -186,11 +189,9 @@ Function PreFlightCheck {
     if (-not (Test-Path $global:oneDrivePath)) {
         throw $returnCodes.OneDriveFolderIsMissing.Desc
     }
-
     if (-not (Test-Path $global:oneDriveAppDataPath)) {
         throw $returnCodes.OneDriveAppDataPathIsMissing.Desc
     }
-
     if (-not (Test-Path $global:oneDriveAppDataPath)) {
         throw $returnCodes.OneDriveAppDataPathIsMissing.Desc
     }
@@ -357,6 +358,4 @@ Function Main {
         Write-Debug "SMTPSendEmail is not enabled or is set to SMTPSendEmailOnErrorOnly while there's no Errors"
     }
     Write-Host -ForegroundColor Cyan "Done!"
-}
-
-Main
+} Main
