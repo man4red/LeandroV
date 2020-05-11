@@ -9,8 +9,8 @@ This script will:
 4. Will send the results by mail (including log as an attachment)
 #>
 
-# Get current directory and set import file in variable 
-$path = Split-Path -parent $MyInvocation.MyCommand.Definition 
+# Get current directory and set import file in variable
+$path = Split-Path -parent $MyInvocation.MyCommand.Definition
 $date = $(Get-Date -format "yyyyMMdd_HHmmss")
 $log =  "$path\$($MyInvocation.MyCommand.Name)_$date.log"
 
@@ -37,7 +37,7 @@ if ($logsCleanupEnabled) {
     }
 }
 
-<# 
+<#
 Random file name and size
     Internally, GetRandomFileName uses RNGCryptoServiceProvider to generate 11-character (name:8+ext:3) string.
     The string represents a base-32 encoded number, so the total number of possible strings is 3211 or 255.
@@ -195,13 +195,12 @@ Function PreFlightCheck {
     if (-not (Test-Path $global:oneDriveAppDataPath)) {
         throw $returnCodes.OneDriveAppDataPathIsMissing.Desc
     }
-    
+
     $datFiles = $false
-    $datFiles = gci -Path "$global:oneDriveAppDataPath\settings\Personal" -File -Force -Filter *.dat -ErrorAction SilentlyContinue
+    $datFiles = Get-ChildItem -Path "$global:oneDriveAppDataPath\settings\Personal" -File -Force -Filter *.dat -ErrorAction SilentlyContinue
 
     if ($datFiles -and $datFiles.Count -gt 0) {
         Write-Debug "$($returnCodes.DatFilesWereFound.Desc)`n`t-- $($datFiles -join "`n`t-- ")"
-        #Write-Debug 
         $global:DatFiles = $datFiles.FullName
     } else {
         throw $returnCodes.DatFilesWereNotFound.Desc
@@ -218,6 +217,7 @@ Function ConvertToHexSearch([string]$string) {
 
 Function BinaryFindInFile {
     [cmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Low')]
+    [OutputType("System.Int32")]
     param (
         [Parameter(Mandatory=$True)]
         [string[]]$path,
@@ -226,28 +226,28 @@ Function BinaryFindInFile {
         [string]$stringToSearch,
 
         [Parameter(Mandatory=$False)]
-        [System.Text.Encoding]$enc = [System.Text.Encoding]::ASCII
+        [System.Text.Encoding]$encoding = [System.Text.Encoding]::ASCII
     )
 
     $numberOfBytesToRead = 1000000
     $stringToSearch = (ConvertToHexSearch $stringToSearch)
-    
+
     foreach ($file in $path) {
         try {
             Write-Debug "Searching for '$stringToSearch' in '$file'`n$($stringToSearch | Format-Hex)"
             $fileStream = [System.IO.File]::Open($file, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
 
-            # binary reader to search for the string 
+            # binary reader to search for the string
             $binaryReader = New-Object System.IO.BinaryReader($fileStream)
 
             # get the contents of the beginning of the file
             [Byte[]] $byteArray = $binaryReader.ReadBytes($numberOfBytesToRead)
 
             # look for string
-            $m = [Regex]::Match([Text.Encoding]::ASCII.GetString($byteArray), $stringToSearch)
-            if ($m.Success) {    
+            $m = [Regex]::Match($encoding.GetString($byteArray), $stringToSearch)
+            if ($m.Success) {
                 Write-Debug "Found '$stringToSearch' at position $($m.Index)"
-                return [bigint]$m.Index
+                return [int32]$m.Index
             } else {
                 Write-Debug "'$stringToSearch' was not found in $file"
             }
@@ -296,7 +296,7 @@ function TestSync ($path) {
                     Write-Error $_.Exception.Message
                 }
             }
-            
+
             if ($i -ge $global:TestCycles) {
                 Write-Debug "Cycle timeout reached"
                 $timeout = $true
