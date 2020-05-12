@@ -17,6 +17,11 @@ $log =  "$path\$($MyInvocation.MyCommand.Name)_$date.log"
 
 try {
     Stop-Transcript | Out-Null
+} catch {
+    Write-Debug $_.Exception.Message
+}
+
+try {
     Start-Transcript -Path $log -Force | Out-Null
 } catch {
     Write-Debug $_.Exception.Message
@@ -39,6 +44,8 @@ $global:testFileNameSize = 42KB
 # OD Paths
 $global:oneDrivePath = "$env:USERPROFILE\OneDrive"
 $global:oneDriveAppDataPath = "$env:USERPROFILE\AppData\Local\Microsoft\OneDrive"
+# Look for business acount too (Default: personal only)
+$global:oneDrivePersonalAndBusiness = $false
 
 # Test cycles parameters
 $global:TestCycleSleepSeconds = 10
@@ -58,8 +65,8 @@ $global:SMTPCc = @("example@example.com", "example@example.com")
 $global:SMTPSubject = "OneDriveTest@$env:COMPUTERNAME ({0})"
 $global:SMTPBody = ""
 # It's not secure to store user/password here
-#$global:SMTPAuthUsername = ""
-#$global:SMTPAuthPassword = ""
+#$global:SMTPAuthUsername = ''
+#$global:SMTPAuthPassword = ''
 
 $returnCodes = @{
     InSync                       = @{ Id = 0; Desc = "Is in sync" }
@@ -160,7 +167,7 @@ SMTP:
     #Sending email
     try {
 
-        # SSL if needed
+        # Uncomment SSL and auth if needed
         #$SMTPClient.EnableSsl = $True
         # SMTP AUTH
         #$SMTPClient.Credentials = New-Object System.Net.NetworkCredential($global:SMTPAuthUsername, $global:SMTPAuthPassword)
@@ -188,7 +195,11 @@ Function PreFlightCheck {
     }
 
     $datFiles = $false
-    $datFiles = Get-ChildItem -Path "$global:oneDriveAppDataPath\settings\Personal" -File -Force -Filter *.dat -ErrorAction SilentlyContinue
+    if ($global:oneDrivePersonalAndBusiness) {
+        $datFiles = Get-ChildItem -Path "$global:oneDriveAppDataPath\settings" -Recurse -File -Force -Filter *.dat -EA SilentlyContinue
+    } else {
+        $datFiles = Get-ChildItem -Path "$global:oneDriveAppDataPath\settings\Personal" -File -Force -Filter *.dat -EA SilentlyContinue
+    }
 
     if ($datFiles -and $datFiles.Count -gt 0) {
         Write-Debug "$($returnCodes.DatFilesWereFound.Desc)`n`t-- $($datFiles -join "`n`t-- ")"
@@ -217,6 +228,9 @@ Function BinaryFindInFile {
         [string]$stringToSearch,
 
         [Parameter(Mandatory=$False)]
+        [bool]$quiet = $false,
+
+        [Parameter(Mandatory=$False)]
         [System.Text.Encoding]$encoding = [System.Text.Encoding]::ASCII
     )
 
@@ -225,7 +239,9 @@ Function BinaryFindInFile {
 
     foreach ($file in $path) {
         try {
-            Write-Debug "Searching for '$stringToSearch' in '$file'`n$($stringToSearch | Format-Hex)"
+            if (-not $quiet) {
+                Write-Debug "Searching for '$stringToSearch' in '$file'`n$($stringToSearch | Format-Hex)"
+            }
             $fileStream = [System.IO.File]::Open($file, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
 
             # Set the position so we can read bytes from the end
@@ -241,10 +257,14 @@ Function BinaryFindInFile {
             # look for string
             $m = [Regex]::Match($encoding.GetString($byteArray), $stringToSearch)
             if ($m.Success) {
-                Write-Debug "Found '$stringToSearch' at position $($m.Index)"
+                if (-not $quiet) {
+                    Write-Debug "Found '$stringToSearch' at position $($m.Index)"
+                }
                 return [int32]$m.Index
             } else {
-                Write-Debug "'$stringToSearch' was not found in $file"
+                if (-not $quiet) {
+                    Write-Debug "'$stringToSearch' was not found in $file"
+                }
                 return [int32]0
             }
         } catch {
@@ -301,13 +321,15 @@ function TestSync ($path) {
         # Now we will look if sync is working by searching it inside the metadata storage
         $timeout = $metaFound = $attribFound = $false
         $i = 0
+        $quiet = $false
         while (-not $timeout -and (-not $metaFound -and -not $attribFound)) {
             # Sleep for a bit
             $i++
             Write-Debug "Sleeping for $global:TestCycleSleepSeconds`s (cyclye $i of $global:TestCycles)"
             Start-Sleep -Seconds $global:TestCycleSleepSeconds
 
-            $metaFound = BinaryFindInFile -path $global:DatFiles -stringToSearch $global:testFileName
+            if ($i -gt 1) {$quiet = $true} 
+            $metaFound = BinaryFindInFile -path $global:DatFiles -stringToSearch $global:testFileName -quiet $quiet
 
             # And just to make sure we'll check the attributes
             if ([bool]$metaFound) {
@@ -377,7 +399,7 @@ Function Main {
 
         Write-Debug "Sending mail..."
         $SMTPSubject = $global:SMTPSubject -f $result.Desc
-        $SMTPBody = ""
+        $SMTPBody = $global:SMTPBody
         if (Test-Path $log) {
             $SMTPBody = Get-Content $log `
                 | ConvertTo-HTML -Property @{Label="$SMTPSubject";Expression={$_}} -Title $SMTPSubject | Out-String
