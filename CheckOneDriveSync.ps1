@@ -1,5 +1,5 @@
 <#
-V1.0
+V1.2
 
 This script will:
 1. Create a TempFile within the user's OneDrive folder (if found)
@@ -114,8 +114,10 @@ function SendEmail {
     # Files to attachments
     if ($Files.Count -gt 0 ) {
         $Files | %{
-            $att = New-Object Net.Mail.Attachment($_)
-            $msg.Attachments.Add($att)
+            if (Test-Path $_) {
+                $att = New-Object Net.Mail.Attachment($_)
+                $msg.Attachments.Add($att)
+            }
         }
     }
 
