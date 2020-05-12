@@ -46,7 +46,7 @@ $global:TestCycles = 6
 
 # MAIL & MESSAGING
 # Global switch enable/disable SMTP send
-$global:SMTPSendEmail = $true
+$global:SMTPSendEmail = $false
 # Send email on Error Only ?
 $global:SMTPSendEmailOnErrorOnly = $true
 $global:SMTPServer = "smtp.example.com"
