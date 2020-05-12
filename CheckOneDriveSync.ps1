@@ -377,8 +377,11 @@ Function Main {
 
         Write-Debug "Sending mail..."
         $SMTPSubject = $global:SMTPSubject -f $result.Desc
-        $SMTPBody = Get-Content $log `
-            | ConvertTo-HTML -Property @{Label="$SMTPSubject";Expression={$_}} -Title $SMTPSubject | Out-String
+        $SMTPBody = ""
+        if (Test-Path $log) {
+            $SMTPBody = Get-Content $log `
+                | ConvertTo-HTML -Property @{Label="$SMTPSubject";Expression={$_}} -Title $SMTPSubject | Out-String
+        }
         SendEmail -From $global:SMTPFrom `
                   -ReplyTo $global:SMTPReplyTo `
                   -To $global:SMTPTo `
