@@ -218,7 +218,7 @@ Function BinaryFindInFile {
         [System.Text.Encoding]$encoding = [System.Text.Encoding]::ASCII
     )
 
-    $numberOfBytesToRead = 1000000
+    $numberOfBytesToRead = 10000
     $stringToSearch = (ConvertToHexSearch $stringToSearch)
 
     foreach ($file in $path) {
@@ -226,9 +226,13 @@ Function BinaryFindInFile {
             Write-Debug "Searching for '$stringToSearch' in '$file'`n$($stringToSearch | Format-Hex)"
             $fileStream = [System.IO.File]::Open($file, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
 
+            # Set the position so we can read bytes from the end
+            if ($fileStream.Length -gt $numberOfBytesToRead) {
+                $fileStream.Position = $fileStream.Length - $numberOfBytesToRead
+            }
+
             # binary reader to search for the string
             $binaryReader = New-Object System.IO.BinaryReader($fileStream)
-
             # get the contents of the beginning of the file
             [Byte[]] $byteArray = $binaryReader.ReadBytes($numberOfBytesToRead)
 
@@ -239,6 +243,7 @@ Function BinaryFindInFile {
                 return [int32]$m.Index
             } else {
                 Write-Debug "'$stringToSearch' was not found in $file"
+                return [int32]0
             }
         } catch {
             throw $_.Exception.Message
@@ -285,7 +290,7 @@ function TestSync ($path) {
             # First - we'll try to create a hidden file within OD folder
             $out = New-Object byte[] $global:testFileNameSize
             (New-Object Random).NextBytes($out)
-            [IO.File]::WriteAllBytes($path, $out)
+            [System.IO.File]::WriteAllBytes($path, $out)
             [System.IO.File]::SetAttributes($path, [System.IO.FileAttributes]::Hidden)
         } catch {
             throw $_.Exception.Message
