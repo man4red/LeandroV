@@ -309,7 +309,13 @@ function TestSync ($path) {
             # First - we'll try to create a hidden file within OD folder
             $out = New-Object byte[] $global:testFileNameSize
             (New-Object Random).NextBytes($out)
-            [System.IO.File]::WriteAllBytes($path, $out)
+            <#
+                I've no idea why but sometimes it returns "Could not find file" Exception
+                which doesn't make sense
+                So, trying to use Set-Content instead
+            #>
+            #[System.IO.File]::WriteAllBytes($path, $out)
+            Set-Content $path -Value (([char[]]$out) -join "") -Force
             [System.IO.File]::SetAttributes($path, [System.IO.FileAttributes]::Hidden)
         } catch {
             throw $_.Exception.Message
