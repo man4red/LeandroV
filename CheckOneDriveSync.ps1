@@ -190,9 +190,6 @@ Function PreFlightCheck {
     if (-not (Test-Path $global:oneDriveAppDataPath)) {
         throw $returnCodes.OneDriveAppDataPathIsMissing.Desc
     }
-    if (-not (Test-Path $global:oneDriveAppDataPath)) {
-        throw $returnCodes.OneDriveAppDataPathIsMissing.Desc
-    }
 
     $datFiles = $false
     if ($global:oneDrivePersonalAndBusiness) {
